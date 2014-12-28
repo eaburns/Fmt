@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -47,10 +48,20 @@ func main() {
 		os.Exit(1)
 	}
 	status := 0
+	noChange := false
 	ffile, err := format(win, os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "format failed: %s\n", err)
 		status = 1
+		goto out
+	}
+	noChange, err = equalsBody(ffile)
+	if err != nil {
+		status = 1
+		goto out
+	}
+	if noChange {
+		status = 0
 		goto out
 	}
 	if err := writeBody(win, ffile); err != nil {
@@ -130,4 +141,41 @@ func writeBody(win *acme.Win, ffile string) error {
 	}
 	_, err = io.Copy(dataWriter{win}, tf)
 	return err
+}
+
+func equalsBody(ffile string) (bool, error) {
+	fbuf, err := ioutil.ReadFile(ffile)
+	if err != nil {
+		return false, err
+	}
+	// Reopen window. Otherwise a read returns an empty slice.
+	win, err := openWin()
+	if err != nil {
+		return false, err
+	}
+	bbuf, err := readBody(win)
+	if err != nil {
+		return false, err
+	}
+	return bytes.Equal(fbuf, bbuf), nil
+}
+
+// We would use win.ReadAll except for a bug in acme
+// where it crashes when reading trying to read more
+// than the negotiated 9P message size.
+// Found here: code.google.com/p/rog-go/exp/cmd/godef
+func readBody(win *acme.Win) ([]byte, error) {
+	var body []byte
+	buf := make([]byte, 8000)
+	for {
+		n, err := win.Read("body", buf)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		body = append(body, buf[0:n]...)
+	}
+	return body, nil
 }
