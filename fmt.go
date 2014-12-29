@@ -79,7 +79,7 @@ func main() {
 		writeFile(win, ffile, q0, q1)
 		exit(0, ffile)
 	}
-	noChange, err = equalsBody(ffile)
+	noChange, err = equalsBody(win, ffile)
 	if err != nil {
 		exit(1, ffile)
 	}
@@ -171,17 +171,13 @@ func writeBody(win *acme.Win, ffile string) error {
 	return err
 }
 
-func equalsBody(ffile string) (bool, error) {
+func equalsBody(win *acme.Win, ffile string) (bool, error) {
 	tf, err := os.Open(ffile)
 	if err != nil {
 		return false, err
 	}
 	defer tf.Close()
-	// Reopen window. Otherwise a read returns an empty slice.
-	win, err := openWin()
-	if err != nil {
-		return false, err
-	}
+	win.Seek("body", 0, 0)
 	fr := bufio.NewReader(tf)
 	br := bufio.NewReader(&bodyReader{win})
 	for {
