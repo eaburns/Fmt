@@ -10,7 +10,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -181,17 +180,15 @@ func equalsBody(win *acme.Win, ffile string) (bool, error) {
 	fr := bufio.NewReader(tf)
 	br := bufio.NewReader(&bodyReader{win})
 	for {
-		fbuf := make([]byte, 1)
-		bbuf := make([]byte, 1)
-		_, errf := fr.Read(fbuf)
+		fb, errf := fr.ReadByte()
 		if errf != nil && errf != io.EOF {
 			return false, errf
 		}
-		_, errb := br.Read(bbuf)
+		bb, errb := br.ReadByte()
 		if errb != nil && errb != io.EOF {
 			return false, errb
 		}
-		if !bytes.Equal(fbuf, bbuf) {
+		if fb != bb {
 			return false, nil
 		}
 		if errf == io.EOF && errb == io.EOF {
