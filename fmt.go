@@ -27,25 +27,25 @@ func (r bodyReader) Read(data []byte) (int, error) {
 	return r.Win.Read("body", data)
 }
 
-type sizeReader struct {
-	size int
-	r    io.Reader
+type countReader struct {
+	count int
+	r     io.Reader
 }
 
-func (r *sizeReader) Read(data []byte) (int, error) {
+func (r *countReader) Read(data []byte) (int, error) {
 	n, err := r.r.Read(data)
-	r.size += n
+	r.count += n
 	return n, err
 }
 
-type sizeWriter struct {
-	size int
-	w    io.Writer
+type countWriter struct {
+	count int
+	w     io.Writer
 }
 
-func (w *sizeWriter) Write(data []byte) (int, error) {
+func (w *countWriter) Write(data []byte) (int, error) {
 	n, err := w.w.Write(data)
-	w.size += n
+	w.count += n
 	return n, err
 }
 
@@ -143,8 +143,8 @@ func format(win *acme.Win, run []string) (tmpFile string, noChange bool, err err
 		return "", false, err
 	}
 	tmpFile = tf.Name()
-	br := &sizeReader{0, bodyReader{win}}
-	fw := &sizeWriter{0, tf}
+	br := &countReader{0, bodyReader{win}}
+	fw := &countWriter{0, tf}
 	cmd := exec.Command(run[0], run[1:]...)
 	cmd.Stdin = br
 	cmd.Stdout = fw
@@ -154,7 +154,7 @@ func format(win *acme.Win, run []string) (tmpFile string, noChange bool, err err
 	} else {
 		err = tf.Close()
 	}
-	noChange = fw.size == br.size
+	noChange = fw.count == br.count
 	return tmpFile, noChange, err
 }
 
