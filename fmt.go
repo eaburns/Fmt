@@ -77,9 +77,8 @@ func main() {
 		status = 1
 		goto out
 	}
-	if noChange {
-		status = 0
-		goto out
+	if !noChange {
+		goto writeBody
 	}
 	noChange, err = equalsBody(ffile)
 	if err != nil {
@@ -90,6 +89,8 @@ func main() {
 		status = 0
 		goto out
 	}
+
+writeBody:
 	if err := writeBody(win, ffile); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to write the body: %s\n", err)
 		status = 1
