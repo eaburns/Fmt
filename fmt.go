@@ -69,37 +69,35 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to get the current selection: %s\n", err)
 		os.Exit(1)
 	}
+	status := 0
 	ffile, sameSize, err := format(win, os.Args[1:])
+	diff := !sameSize
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "format failed: %s\n", err)
-		exit(1, ffile)
-	}
-	if !sameSize {
-		writeFile(win, ffile, q0, q1)
-		exit(0, ffile)
-	}
-	diff, err := bodyDiff(win, ffile)
-	if err != nil {
-		exit(1, ffile)
+		status = 1
+		goto out
 	}
 	if !diff {
-		exit(0, ffile)
+		diff, err = bodyDiff(win, ffile)
+		if err != nil {
+			status = 1
+			goto out
+		}
 	}
-	writeFile(win, ffile, q0, q1)
-}
+	if diff {
+		if err := writeBody(win, ffile); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to write the body: %s\n", err)
+			status = 1
+			goto out
+		}
+		if err := showAddr(win, q0, q1); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to restore the selection: %s\n", err)
+			status = 1
+			goto out
+		}
+	}
 
-func writeFile(win *acme.Win, ffile string, q0, q1 int) {
-	if err := writeBody(win, ffile); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write the body: %s\n", err)
-		exit(1, ffile)
-	}
-	if err := showAddr(win, q0, q1); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to restore the selection: %s\n", err)
-		exit(1, ffile)
-	}
-}
-
-func exit(status int, ffile string) {
+out:
 	if err := os.Remove(ffile); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to remove tempfile %s: %s\n", ffile, err)
 	}
