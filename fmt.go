@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -172,38 +173,35 @@ func writeBody(win *acme.Win, ffile string) error {
 }
 
 func equalsBody(ffile string) (bool, error) {
-	fbuf, err := ioutil.ReadFile(ffile)
+	tf, err := os.Open(ffile)
 	if err != nil {
 		return false, err
 	}
+	defer tf.Close()
 	// Reopen window. Otherwise a read returns an empty slice.
 	win, err := openWin()
 	if err != nil {
 		return false, err
 	}
-	bbuf, err := readBody(win)
-	if err != nil {
-		return false, err
-	}
-	return bytes.Equal(fbuf, bbuf), nil
-}
-
-// We would use win.ReadAll except for a bug in acme
-// where it crashes when reading trying to read more
-// than the negotiated 9P message size.
-// Found here: code.google.com/p/rog-go/exp/cmd/godef
-func readBody(win *acme.Win) ([]byte, error) {
-	var body []byte
-	buf := make([]byte, 8000)
+	fr := bufio.NewReader(tf)
+	br := bufio.NewReader(&bodyReader{win})
 	for {
-		n, err := win.Read("body", buf)
-		if err == io.EOF {
+		fbuf := make([]byte, 1)
+		bbuf := make([]byte, 1)
+		_, errf := fr.Read(fbuf)
+		if errf != nil && errf != io.EOF {
+			return false, errf
+		}
+		_, errb := br.Read(bbuf)
+		if errb != nil && errb != io.EOF {
+			return false, errb
+		}
+		if !bytes.Equal(fbuf, bbuf) {
+			return false, nil
+		}
+		if errf == io.EOF && errb == io.EOF {
 			break
 		}
-		if err != nil {
-			return nil, err
-		}
-		body = append(body, buf[0:n]...)
 	}
-	return body, nil
+	return true, nil
 }
