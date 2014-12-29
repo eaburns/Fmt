@@ -70,39 +70,37 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to get the current selection: %s\n", err)
 		os.Exit(1)
 	}
-	status := 0
 	ffile, noChange, err := format(win, os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "format failed: %s\n", err)
-		status = 1
-		goto out
+		exit(1, ffile)
 	}
 	if !noChange {
-		goto writeBody
+		writeFile(win, ffile, q0, q1)
+		exit(0, ffile)
 	}
 	noChange, err = equalsBody(ffile)
 	if err != nil {
-		status = 1
-		goto out
+		exit(1, ffile)
 	}
 	if noChange {
-		status = 0
-		goto out
+		exit(0, ffile)
 	}
+	writeFile(win, ffile, q0, q1)
+}
 
-writeBody:
+func writeFile(win *acme.Win, ffile string, q0, q1 int) {
 	if err := writeBody(win, ffile); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to write the body: %s\n", err)
-		status = 1
-		goto out
+		exit(1, ffile)
 	}
 	if err := showAddr(win, q0, q1); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to restore the selection: %s\n", err)
-		status = 1
-		goto out
+		exit(1, ffile)
 	}
+}
 
-out:
+func exit(status int, ffile string) {
 	if err := os.Remove(ffile); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to remove tempfile %s: %s\n", ffile, err)
 	}
