@@ -26,6 +26,28 @@ func (r bodyReader) Read(data []byte) (int, error) {
 	return r.Win.Read("body", data)
 }
 
+type sizeReader struct {
+	size int
+	r    io.Reader
+}
+
+func (r *sizeReader) Read(data []byte) (int, error) {
+	n, err := r.r.Read(data)
+	r.size += n
+	return n, err
+}
+
+type sizeWriter struct {
+	size int
+	w    io.Writer
+}
+
+func (w *sizeWriter) Write(data []byte) (int, error) {
+	n, err := w.w.Write(data)
+	w.size += n
+	return n, err
+}
+
 type dataWriter struct{ *acme.Win }
 
 func (w dataWriter) Write(data []byte) (int, error) {
@@ -48,11 +70,14 @@ func main() {
 		os.Exit(1)
 	}
 	status := 0
-	noChange := false
-	ffile, err := format(win, os.Args[1:])
+	ffile, noChange, err := format(win, os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "format failed: %s\n", err)
 		status = 1
+		goto out
+	}
+	if noChange {
+		status = 0
 		goto out
 	}
 	noChange, err = equalsBody(ffile)
@@ -112,22 +137,25 @@ func showAddr(win *acme.Win, q0, q1 int) error {
 }
 
 // If tmpFile is non-empty, it is created and must be removed by the caller.
-func format(win *acme.Win, run []string) (tmpFile string, err error) {
+func format(win *acme.Win, run []string) (tmpFile string, noChange bool, err error) {
 	tf, err := ioutil.TempFile(os.TempDir(), "Fmt")
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	tmpFile = tf.Name()
+	br := &sizeReader{0, bodyReader{win}}
+	fw := &sizeWriter{0, tf}
 	cmd := exec.Command(run[0], run[1:]...)
-	cmd.Stdin = bodyReader{win}
-	cmd.Stdout = tf
+	cmd.Stdin = br
+	cmd.Stdout = fw
 	cmd.Stderr = os.Stderr
 	if err = cmd.Run(); err != nil {
 		tf.Close()
 	} else {
 		err = tf.Close()
 	}
-	return tmpFile, err
+	noChange = fw.size == br.size
+	return tmpFile, noChange, err
 }
 
 func writeBody(win *acme.Win, ffile string) error {
