@@ -69,20 +69,20 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to get the current selection: %s\n", err)
 		os.Exit(1)
 	}
-	ffile, noChange, err := format(win, os.Args[1:])
+	ffile, sameSize, err := format(win, os.Args[1:])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "format failed: %s\n", err)
 		exit(1, ffile)
 	}
-	if !noChange {
+	if !sameSize {
 		writeFile(win, ffile, q0, q1)
 		exit(0, ffile)
 	}
-	noChange, err = equalsBody(win, ffile)
+	diff, err := bodyDiff(win, ffile)
 	if err != nil {
 		exit(1, ffile)
 	}
-	if noChange {
+	if !diff {
 		exit(0, ffile)
 	}
 	writeFile(win, ffile, q0, q1)
@@ -136,7 +136,7 @@ func showAddr(win *acme.Win, q0, q1 int) error {
 }
 
 // If tmpFile is non-empty, it is created and must be removed by the caller.
-func format(win *acme.Win, run []string) (tmpFile string, noChange bool, err error) {
+func format(win *acme.Win, run []string) (tmpFile string, sameSize bool, err error) {
 	tf, err := ioutil.TempFile(os.TempDir(), "Fmt")
 	if err != nil {
 		return "", false, err
@@ -153,8 +153,8 @@ func format(win *acme.Win, run []string) (tmpFile string, noChange bool, err err
 	} else {
 		err = tf.Close()
 	}
-	noChange = fw.count == br.count
-	return tmpFile, noChange, err
+	sameSize = fw.count == br.count
+	return
 }
 
 func writeBody(win *acme.Win, ffile string) error {
@@ -170,7 +170,7 @@ func writeBody(win *acme.Win, ffile string) error {
 	return err
 }
 
-func equalsBody(win *acme.Win, ffile string) (bool, error) {
+func bodyDiff(win *acme.Win, ffile string) (bool, error) {
 	tf, err := os.Open(ffile)
 	if err != nil {
 		return false, err
@@ -189,11 +189,10 @@ func equalsBody(win *acme.Win, ffile string) (bool, error) {
 			return false, errb
 		}
 		if fb != bb {
-			return false, nil
+			return true, nil
 		}
 		if errf == io.EOF && errb == io.EOF {
-			break
+			return false, nil
 		}
 	}
-	return true, nil
 }
