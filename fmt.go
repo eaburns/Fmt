@@ -81,6 +81,7 @@ func main() {
 		diff, err = bodyDiff(win, ffile)
 		if err != nil {
 			// Not fatal. Re-write the body anyway.
+			fmt.Fprintf(os.Stderr, "failed to diff the body: ", err)
 			diff = true
 		}
 	}
