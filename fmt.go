@@ -9,6 +9,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,6 +24,28 @@ type bodyReader struct{ *acme.Win }
 
 func (r bodyReader) Read(data []byte) (int, error) {
 	return r.Win.Read("body", data)
+}
+
+type countReader struct {
+	count int
+	r     io.Reader
+}
+
+func (r *countReader) Read(data []byte) (int, error) {
+	n, err := r.r.Read(data)
+	r.count += n
+	return n, err
+}
+
+type countWriter struct {
+	count int
+	w     io.Writer
+}
+
+func (w *countWriter) Write(data []byte) (int, error) {
+	n, err := w.w.Write(data)
+	w.count += n
+	return n, err
 }
 
 type dataWriter struct{ *acme.Win }
@@ -47,21 +70,32 @@ func main() {
 		os.Exit(1)
 	}
 	status := 0
-	ffile, err := format(win, os.Args[1:])
+	ffile, sameSize, err := format(win, os.Args[1:])
+	diff := !sameSize
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "format failed: %s\n", err)
 		status = 1
 		goto out
 	}
-	if err := writeBody(win, ffile); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write the body: %s\n", err)
-		status = 1
-		goto out
+	if !diff {
+		diff, err = bodyDiff(win, ffile)
+		if err != nil {
+			// Not fatal. Re-write the body anyway.
+			fmt.Fprintf(os.Stderr, "failed to diff the body: ", err)
+			diff = true
+		}
 	}
-	if err := showAddr(win, q0, q1); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to restore the selection: %s\n", err)
-		status = 1
-		goto out
+	if diff {
+		if err := writeBody(win, ffile); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to write the body: %s\n", err)
+			status = 1
+			goto out
+		}
+		if err := showAddr(win, q0, q1); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to restore the selection: %s\n", err)
+			status = 1
+			goto out
+		}
 	}
 
 out:
@@ -101,22 +135,25 @@ func showAddr(win *acme.Win, q0, q1 int) error {
 }
 
 // If tmpFile is non-empty, it is created and must be removed by the caller.
-func format(win *acme.Win, run []string) (tmpFile string, err error) {
+func format(win *acme.Win, run []string) (tmpFile string, sameSize bool, err error) {
 	tf, err := ioutil.TempFile(os.TempDir(), "Fmt")
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	tmpFile = tf.Name()
+	br := &countReader{0, bodyReader{win}}
+	fw := &countWriter{0, tf}
 	cmd := exec.Command(run[0], run[1:]...)
-	cmd.Stdin = bodyReader{win}
-	cmd.Stdout = tf
+	cmd.Stdin = br
+	cmd.Stdout = fw
 	cmd.Stderr = os.Stderr
 	if err = cmd.Run(); err != nil {
 		tf.Close()
 	} else {
 		err = tf.Close()
 	}
-	return tmpFile, err
+	sameSize = fw.count == br.count
+	return
 }
 
 func writeBody(win *acme.Win, ffile string) error {
@@ -130,4 +167,31 @@ func writeBody(win *acme.Win, ffile string) error {
 	}
 	_, err = io.Copy(dataWriter{win}, tf)
 	return err
+}
+
+func bodyDiff(win *acme.Win, ffile string) (bool, error) {
+	tf, err := os.Open(ffile)
+	if err != nil {
+		return false, err
+	}
+	defer tf.Close()
+	win.Seek("body", 0, 0)
+	fr := bufio.NewReader(tf)
+	br := bufio.NewReader(&bodyReader{win})
+	for {
+		fb, errf := fr.ReadByte()
+		if errf != nil && errf != io.EOF {
+			return false, errf
+		}
+		bb, errb := br.ReadByte()
+		if errb != nil && errb != io.EOF {
+			return false, errb
+		}
+		if fb != bb {
+			return true, nil
+		}
+		if errf == io.EOF && errb == io.EOF {
+			return false, nil
+		}
+	}
 }
