@@ -80,8 +80,8 @@ func main() {
 	if !diff {
 		diff, err = bodyDiff(win, ffile)
 		if err != nil {
-			status = 1
-			goto out
+			// Not fatal. Re-write the body anyway.
+			diff = true
 		}
 	}
 	if diff {
