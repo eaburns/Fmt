@@ -157,6 +157,14 @@ func format(win *acme.Win, run []string) (tmpFile string, sameSize bool, err err
 }
 
 func writeBody(win *acme.Win, ffile string) error {
+	if err := win.Ctl("nomark"); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to set nomark: %s", err)
+	}
+	defer func() {
+		if err := win.Ctl("mark"); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to set mark: %s", err)
+		}
+	}()
 	tf, err := os.Open(ffile)
 	if err != nil {
 		return err
